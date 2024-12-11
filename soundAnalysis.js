@@ -6,13 +6,14 @@ const dbCtx = dbCanvas.getContext('2d');
 const vibrationValueElem = document.getElementById('vibrationValue');
 const dbValueElem = document.getElementById('dbValue');
 const statusElem = document.getElementById('status');
+const vibrationDataList = document.getElementById('vibrationDataList');
+const dbDataList = document.getElementById('dbDataList');
 
 let vibrationData = [];
 let dbData = [];
-let maxDataPoints = 100; // 그래프에 표시할 최대 데이터 포인트 수
+let maxDataPoints = 100;  // 그래프에 표시할 최대 데이터 포인트 수
 let vibrationThreshold = 15;  // 진동 감지 임계값 (진동이 이 값 이상일 때 감지)
 
-// 진동 감지 관련 변수들
 let accelerationX = 0, accelerationY = 0, accelerationZ = 0;
 let audioContext, analyser, microphone, bufferLength, dataArray;
 
@@ -28,17 +29,17 @@ function startVibrationDetection() {
 
 // DeviceMotionEvent 핸들러
 function handleDeviceMotion(event) {
-    // 가속도 센서에서 데이터를 가져옴
     accelerationX = event.acceleration.x;
     accelerationY = event.acceleration.y;
     accelerationZ = event.acceleration.z;
 
-    // 진동을 감지하려면 가속도의 크기를 계산
+    // 가속도의 크기 계산
     let accelerationMagnitude = Math.sqrt(accelerationX * accelerationX + accelerationY * accelerationY + accelerationZ * accelerationZ);
 
     // 진동 감지
     if (accelerationMagnitude > vibrationThreshold) {
         vibrationData.push(accelerationMagnitude);
+        addToVibrationDataList(accelerationMagnitude);
     }
 
     // 데이터 포인트가 너무 많으면 초기화
@@ -83,20 +84,15 @@ function startDBMeasurement() {
     if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
         navigator.mediaDevices.getUserMedia({ audio: true })
             .then(stream => {
-                // 오디오 컨텍스트 생성
                 audioContext = new (window.AudioContext || window.webkitAudioContext)();
                 analyser = audioContext.createAnalyser();
-
-                // 마이크로부터 입력을 받아 오디오 소스를 연결
                 microphone = audioContext.createMediaStreamSource(stream);
                 microphone.connect(analyser);
 
-                // AnalyserNode 설정
                 analyser.fftSize = 256;
                 bufferLength = analyser.frequencyBinCount;
                 dataArray = new Uint8Array(bufferLength);
 
-                // 데시벨 측정 시작
                 drawDBGraph();
                 statusElem.textContent = "상태: 데시벨 측정 중...";
             })
@@ -127,8 +123,13 @@ function drawDBGraph() {
         x += barWidth + 1;
     }
 
-    // 데시벨 계산 및 표시
     const dB = calculateDecibels(dataArray);
+
+    // 데시벨 값이 38 이상일 때만 기록
+    if (dB >= 38) {
+        addToDBDataList(dB);
+    }
+
     dbValueElem.textContent = `데시벨: ${dB.toFixed(2)} dB`;
 
     requestAnimationFrame(drawDBGraph);
@@ -153,7 +154,7 @@ function calculateDecibels(dataArray) {
     }
 
     // rms가 128보다 작으면, 128에 대한 비율을 계산하여 양의 값으로 출력
-    let dB = 10 *20 * Math.log10(rms / 128);
+    let dB = 30 * 20 * Math.log10(rms / 128);
 
     // dB 값이 NaN일 경우 0으로 설정
     if (isNaN(dB)) {
@@ -161,10 +162,26 @@ function calculateDecibels(dataArray) {
     }
 
     // dB 값이 음수로 나올 수 있기 때문에, 0보다 작은 값은 0으로 처리
-    // 이 부분을 양수로 바꾸는 방법은 absolute값을 취하는 것입니다.
     return Math.abs(dB); // 양수로 반환
 }
 
-// 페이지 로드 후 진동 감지 및 데시벨 측정 시작
-startVibrationDetection();
-startDBMeasurement();
+// 데시벨 값 목록에 추가
+function addToDBDataList(value) {
+    const listItem = document.createElement('li');
+    const currentTime = new Date().toLocaleTimeString();  // 현재 시간 기록
+    listItem.textContent = `데시벨: ${value.toFixed(2)} dB, 시간: ${currentTime}`;
+    dbDataList.appendChild(listItem);
+}
+
+// 진동 값 목록에 추가
+function addToVibrationDataList(value) {
+    const listItem = document.createElement('li');
+    listItem.textContent = `진동: ${value.toFixed(2)}`;
+    vibrationDataList.appendChild(listItem);
+}
+
+// 페이지 로드 후 진동 감지 및 데시벨 측정을 시작
+window.onload = function () {
+    startVibrationDetection();
+    startDBMeasurement();
+};
